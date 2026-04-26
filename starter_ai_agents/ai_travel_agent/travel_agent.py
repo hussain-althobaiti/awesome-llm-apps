@@ -4,6 +4,7 @@ from agno.run.agent import RunOutput
 from agno.tools.serpapi import SerpApiTools
 import streamlit as st
 import re
+import os
 from agno.models.openai import OpenAIChat
 from icalendar import Calendar, Event
 from datetime import datetime, timedelta
@@ -60,23 +61,37 @@ def generate_ics_content(plan_text:str, start_date: datetime = None) -> bytes:
 
 # Set up the Streamlit app
 st.title("AI Travel Planner ")
-st.caption("Plan your next adventure with AI Travel Planner by researching and planning a personalized itinerary on autopilot using GPT-4o")
+st.caption("Plan your next adventure with AI Travel Planner by researching and planning a personalized itinerary with any OpenAI-compatible model")
 
 # Initialize session state to store the generated itinerary
 if 'itinerary' not in st.session_state:
     st.session_state.itinerary = None
 
-# Get OpenAI API key from user
-openai_api_key = st.text_input("Enter OpenAI API Key to access GPT-4o", type="password")
+# Load configuration from environment variables
+openai_api_key_env = os.getenv("OPENAI_API_KEY", "").strip()
+serp_api_key_env = os.getenv("SERPAPI_API_KEY", "").strip()
+base_url_env = os.getenv("OPENAI_BASE_URL", "https://integrate.api.nvidia.com/v1").strip()
+model_id_env = os.getenv("OPENAI_MODEL_ID", "z-ai/glm4.7").strip()
 
-# Get SerpAPI key from the user
-serp_api_key = st.text_input("Enter Serp API Key for Search functionality", type="password")
+# Allow optional UI overrides for environment configuration
+openai_api_key_input = st.text_input("Model API Key (optional override)", type="password")
+base_url = st.text_input("OpenAI-compatible Base URL", value=base_url_env)
+model_id = st.text_input("Model ID", value=model_id_env)
 
-if openai_api_key and serp_api_key:
+# Get SerpAPI key from env with optional UI override
+serp_api_key_input = st.text_input("Serp API Key (optional override)", type="password")
+
+openai_api_key = openai_api_key_input.strip() or openai_api_key_env
+serp_api_key = serp_api_key_input.strip() or serp_api_key_env
+
+if openai_api_key_env or serp_api_key_env:
+    st.caption("Loaded API keys from environment variables. You can override them above if needed.")
+
+if openai_api_key and serp_api_key and base_url and model_id:
     researcher = Agent(
         name="Researcher",
         role="Searches for travel destinations, activities, and accommodations based on user preferences",
-        model=OpenAIChat(id="gpt-4o", api_key=openai_api_key),
+        model=OpenAIChat(id=model_id, api_key=openai_api_key, base_url=base_url),
         description=dedent(
             """\
         You are a world-class travel researcher. Given a travel destination and the number of days the user wants to travel for,
@@ -96,7 +111,7 @@ if openai_api_key and serp_api_key:
     planner = Agent(
         name="Planner",
         role="Generates a draft itinerary based on user preferences and research results",
-        model=OpenAIChat(id="gpt-4o", api_key=openai_api_key),
+        model=OpenAIChat(id=model_id, api_key=openai_api_key, base_url=base_url),
         description=dedent(
             """\
         You are a senior travel planner. Given a travel destination, the number of days the user wants to travel for, and a list of research results,
